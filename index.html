@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Modern Calculator — Mobile Fullscreen</title>
+  <meta name="description" content="A full-screen mobile-first calculator (basic + scientific) ready to be installed as PWA." />
+  <link rel="manifest" href="#" id="manifest-link">
+  <style>
+    :root{--bg:linear-gradient(135deg,#0f172a 0%,#0b1220 100%);--card:#0b1220;--accent:#7c3aed;--muted:rgba(255,255,255,0.12);--glass:rgba(255,255,255,0.03);--text:#f8fafc;--radius:14px}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;padding:20px}
+    .app{width:100%;max-width:520px;border-radius:20px;padding:16px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:0 10px 30px rgba(2,6,23,0.6);backdrop-filter:blur(6px)}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .brand h1{font-size:16px;margin:0}
+    .brand p{margin:0;font-size:12px;color:rgba(255,255,255,0.7)}
+    .screen{background:var(--card);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+    .display{min-height:86px;padding:8px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);display:flex;flex-direction:column;justify-content:center;align-items:flex-end}
+    .expr{font-size:18px;color:rgba(255,255,255,0.6);word-break:break-all}
+    .result{font-size:30px;font-weight:600}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .btn{flex:1 0 21%;padding:14px;border-radius:12px;background:var(--glass);text-align:center;font-weight:600;border:1px solid var(--muted);cursor:pointer;user-select:none}
+    .btn.operator{background:transparent;border:1px dashed rgba(255,255,255,0.06)}
+    .btn.action{background:linear-gradient(90deg,var(--accent),#06b6d4);box-shadow:0 6px 18px rgba(124,58,237,0.14)}
+    .btn.wide{flex:1 0 44%}
+    .panel{display:flex;gap:8px;margin-top:10px;align-items:center;justify-content:space-between}
+    .chip{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.03);font-size:13px}
+    .history{margin-top:12px;max-height:160px;overflow:auto;padding:8px;border-radius:10px;background:rgba(255,255,255,0.02)}
+    .history .item{padding:8px;border-radius:8px;margin-bottom:6px;background:transparent;border:1px dashed rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center}
+    .history .expr{font-size:13px}
+    footer{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px;color:rgba(255,255,255,0.6)}
+    @media (max-width:420px){.btn{padding:12px;font-size:15px}}
+  </style>
+</head>
+<body>
+  <main class="app" role="application" aria-label="Calculator">
+    <header>
+      <div class="brand">
+        <div class="logo">C</div>
+        <div>
+          <h1>Calculator</h1>
+          <p>Basic • Scientific • Fullscreen</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="modeBtn" class="chip" title="Toggle basic/scientific">Scientific</button>
+        <button id="themeBtn" class="chip" title="Copy result">Copy</button>
+      </div>
+    </header>
+
+    <section class="screen">
+      <div class="display" id="display">
+        <div class="expr" id="expression">0</div>
+        <div class="result" id="result">0</div>
+      </div>
+      <div class="controls" id="buttons"></div>
+      <div class="panel">
+        <div class="chip" id="pwaChip">PWA-ready</div>
+        <div class="chip" id="vibrateChip">Vibrate on press</div>
+      </div>
+      <div class="history" id="history" aria-live="polite"></div>
+    </section>
+
+    <footer>
+      <div>Tap buttons or use keyboard</div>
+      <div>Made for mobile · Local-only</div>
+    </footer>
+  </main>
+
+  <script>
+// ---------- Calculator Logic ----------
+const buttonsEl = document.getElementById('buttons');
+const exprEl = document.getElementById('expression');
+const resultEl = document.getElementById('result');
+const historyEl = document.getElementById('history');
+const modeBtn = document.getElementById('modeBtn');
+const themeBtn = document.getElementById('themeBtn');
+let expr='';
+let history = JSON.parse(localStorage.getItem('calc_history')||'[]');
+let scientific=true;
+const KEYS_BASIC = ['7','8','9','/','sqrt','4','5','6','*','pow','1','2','3','-','(','0','.','%','+',')'];
+const KEYS_SCI = ['sin','cos','tan','log','ln','asin','acos','atan','abs','exp'];
+function renderButtons(){
+  buttonsEl.innerHTML='';
+  const create=(label,cls='')=>{const b=document.createElement('button');b.className='btn '+cls;b.textContent=label;b.setAttribute('data-val',label);b.addEventListener('click',onPress);return b;}
+  buttonsEl.appendChild(create('AC','operator'));
+  buttonsEl.appendChild(create('DEL','operator'));
+  buttonsEl.appendChild(create('ANS','operator'));
+  buttonsEl.appendChild(create('=','action wide'));
+  for(let key of KEYS_BASIC) buttonsEl.appendChild(create(key,isNaN(key)&&key.length>1?'operator':''));
+  if(scientific) for(let f of KEYS_SCI) buttonsEl.appendChild(create(f,'operator'));
+  buttonsEl.appendChild(create('COPY','operator'));
+  buttonsEl.appendChild(create('CLR HIST','operator'));
+}
+function onPress(e){
+  const v=(e.currentTarget||e.target).getAttribute('data-val');
+  navigator.vibrate?.(10);
+  if(v==='AC'){expr='';update();return}
+  if(v==='DEL'){expr=expr.slice(0,-1);update();return}
+  if(v==='='){evaluate();return}
+  if(v==='ANS'){if(history.length) expr+=history[0].result;update();return}
+  if(v==='COPY'){copyResult();return}
+  if(v==='CLR HIST'){history=[];localStorage.removeItem('calc_history');renderHistory();return}
+  expr+=(v==='sqrt'?'sqrt(':v==='pow'?'pow(':v);
+  update();
+}
+function sanitizeForEval(input){
+  if(!/^[0-9+\-*/().,%\sA-Za-z]*$/.test(input)) throw new Error('Invalid characters');
+  let out=input;
+  out=out.replace(/\blog\b/g,'Math.log10');
+  out=out.replace(/\bln\b/g,'Math.log');
+  for(let fn of ['sin','cos','tan','asin','acos','atan','sqrt','abs','exp']){out=out.replace(new RegExp('\\b'+fn+'\\b','g'),'Math.'+fn);}
+  out=out.replace(/\bpow\s*\(/g,'Math.pow(');
+  out=out.replace(/(\d+(?:\.\d+)?)%/g,'($1/100)');
+  return out;
+}
+function evaluate(){
+  if(!expr) return;
+  try{
+    const code=sanitizeForEval(expr);
+    const value=Function('return ('+code+')')();
+    const pretty=Number.isFinite(value)?+(+value).toPrecision(12):value;
+    addHistory(expr,pretty);
+    resultEl.textContent=pretty;
+    expr=String(pretty);
+    update();
+  }catch(err){resultEl.textContent='Error';}
+}
+function addHistory(equation,result){
+  const entry={equation,result,at:Date.now()};
+  history.unshift(entry);history=history.slice(0,30);localStorage.setItem('calc_history',JSON.stringify(history));renderHistory();
+}
+function renderHistory(){
+  historyEl.innerHTML='';
+  if(history.length===0){historyEl.textContent='No history yet';return}
+  for(let item of history){
+    const row=document.createElement('div');row.className='item';
+    const left=document.createElement('div');left.innerHTML=`<div class='expr'>${item.equation}</div><div style='font-size:12px;color:rgba(255,255,255,0.4)'>${new Date(item.at).toLocaleString()}</div>`;
+    const right=document.createElement('div');right.innerHTML=`<div style='font-weight:700'>${item.result}</div><button data-val='ANS' class='btn' style='padding:6px;margin-left:10px'>Use</button>`;
+    right.querySelector('button').addEventListener('click',()=>{expr=String(item.result);update();window.scrollTo(0,0);});
+    row.appendChild(left);row.appendChild(right);historyEl.appendChild(row);
+  }
+}
+function update(){exprEl.textContent=expr||'0';try{const code=sanitizeForEval(expr||'0');const value=Function('return ('+code+')')();resultEl.textContent=Number.isFinite(value)?+(+value).toPrecision(12):value;}catch(e){resultEl.textContent=''};renderButtons();}
+function copyResult(){const t=resultEl.textContent||expr||'';navigator.clipboard?.writeText(t).then(()=>{themeBtn.textContent='Copied';setTimeout(()=>themeBtn.textContent='Copy',900)}).catch(()=>{themeBtn.textContent='Copy failed';setTimeout(()=>themeBtn.textContent='Copy',900)})}
+window.addEventListener('keydown',e=>{if(e.key==='Enter'){evaluate();e.preventDefault();return}if(e.key==='Backspace'){expr=expr.slice(0,-1);update();return}if(/^[0-9.+\-*/()%]$/.test(e.key)){expr+=e.key;update();}});
+modeBtn.addEventListener('click',()=>{scientific=!scientific;modeBtn.textContent=scientific?'Scientific':'Basic';update();});
+themeBtn.addEventListener('click',copyResult);
+renderButtons();renderHistory();update();
+// ---------- Manifest + SW ----------
+const manifest={name:'Calculator — Mobile Fullscreen',short_name:'Calculator',start_url:'./',display:'standalone',background_color:'#656558',theme_color:'#0b1220',icons:[{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABnElEQVRYR+2XvUoDQRTHP7MK5gIhkBO0g8Qi0IolxATCQvYuC0gURmF3Nto7YER8hRUXcY3qyiO7rO22k2I2YVfSza1zq57ztnZxDxAlvBMFAFqgC2gQ+IOZl2C5ldAC+gDFQJXkG8j7T+Y3gFTGxL3B7Qp1sVQA1N7DJYcA+oBmZce54CRpxuVYF1AgC2BSPoBtRLrGJ4AWi9gHuA1wJ4w7uAW8Bf3Q0i8IbgBBgR9AB0i0oD3n84N2Wdf2CjcAjYDBwVtSBV3BcY0oL8Y0DDwB2AJ/6P7t5gGhZcLVXoF1VuWm1P9X74D9bbgHxMXkD0kF7sqjEsC8QVtA39nG2yTqjx32AlXv4z7cE/j0LsjHAlxAUd74nPLdXQG6owwTgHE1K7JvCLV3Y53i9OH0VYc0gALj2Aw0F9s0lPVFWsTq1s2qwoXWmT+EdfuDTcAvu89P9hCv7Y78J22HOB9+b4Hn9tx90NZDRXxGbm0AAAAASUVORK5CYII=',sizes:'32x32',type:'image/png'},{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABg0lEQVR4Xu3ZwU3DQBSA4Vt7SC4F0wA8gRRIzE2wQCKh4OBAIUk+AH0pVoYBdSggk7U3VQ7s7y7zfq3nEAl8NkBC2m0ZkRYwIQ1ILGlQQsmgHRmBvEK1MImkM1OCUQgiRY0lM1OaEMURT1CEU0h2RZ3MpsuwzRuzgCiw7ZMTxDm4IiqUzUyUcwIQhS3HGFYwBQaAY1tY6cgYoAMCrm4PgLYgOe0JjXIlp3BHiQI1pQAmkDp5ZfOkGoHflI1piHgCK1V8gxqCwAQNliwLQegK4Q1YYD4E1hDOFA1lB2IAWWhjxoXgM4m3ET1/6E+ClwDmRWxCZYBfEdFgLw1jPEVYJ9iJ1jDYCwUz7fwKQAf3RmqgG+4zHgV4x9YJ0X0ZLgVjW5R+gUHgHnpF3Pz1h3fgAAAABJRU5ErkJggg==',sizes:'64x64',type:'image/png'}]};
+const manifestBlob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+document.getElementById('manifest-link').href=URL.createObjectURL(manifestBlob);
+if('serviceWorker' in navigator){navigator.serviceWorker.register(URL.createObjectURL(new Blob([`self.addEventListener('install',e=>{e.waitUntil(caches.open('calc-cache').then(cache=>cache.addAll(['./'])))})
+self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))})`],{type:'application/javascript'})));}
+  </script>
+</body>
+</html>
+
